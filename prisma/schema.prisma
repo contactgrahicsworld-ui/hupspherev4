@@ -1,0 +1,456 @@
+// HubSphere Enterprise V4 — Master Database Schema
+// Optimized for Supabase PostgreSQL + Prisma ORM with strict Multi-Tenant Scoping
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================= MULTI-TENANT & USER ACCESS =================
+
+enum TenantPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  EXPIRED
+}
+
+model Tenant {
+  id              String         @id @default(uuid())
+  name            String
+  slug            String         @unique
+  plan            TenantPlan     @default(STARTER)
+  status          TenantStatus   @default(ACTIVE)
+  maxUsers        Int            @default(10)
+  maxStorageMb    Int            @default(5120)
+  storageUsedMb   Float          @default(0.0)
+  aiMonthlyLimit  Int            @default(5000)
+  aiUsageCount    Int            @default(0)
+  simDeviceLimit  Int            @default(2)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Tenant Scoped Relations
+  users           User[]
+  roles           Role[]
+  departments     Department[]
+  designations    Designation[]
+  leads           Lead[]
+  contacts        Contact[]
+  deals           Deal[]
+  activities      Activity[]
+  employees       Employee[]
+  attendances     Attendance[]
+  leaves          LeaveRequest[]
+  payrolls        Payroll[]
+  products        Product[]
+  invoices        Invoice[]
+  ledgerEntries   LedgerEntry[]
+  pairedDevices   PairedDevice[]
+  simCalls        SimCall[]
+  workflows       Workflow[]
+  aiAgentLogs     AIAgentAuditLog[]
+  subscriptions   Subscription[]
+  upiPayments     UPIReconciliation[]
+}
+
+model User {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email           String         @unique
+  name            String
+  passwordHash    String
+  roleId          String
+  role            Role           @relation(fields: [roleId], references: [id])
+  phone           String?
+  avatarUrl       String?
+  isActive        Boolean        @default(true)
+  twoFactorActive Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  assignedLeads   Lead[]         @relation("LeadAssignee")
+  assignedDeals   Deal[]         @relation("DealAssignee")
+  pairedDevices   PairedDevice[]
+  employee        Employee?
+
+  @@index([tenantId])
+}
+
+model Role {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String         // Super Admin, Sales Director, HR Manager, Rep, etc.
+  description     String?
+  permissions     String[]       // List of granular permissions (e.g. crm:lead:create)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  users           User[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// ================= CRM MODULE =================
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+model Lead {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedToId    String?
+  assignedTo      User?          @relation("LeadAssignee", fields: [assignedToId], references: [id])
+  name            String
+  companyName     String?
+  email           String?
+  phone           String
+  source          String         @default("DIRECT")
+  score           Int            @default(50)
+  status          LeadStatus     @default(NEW)
+  estimatedValue  Float          @default(0.0)
+  tags            String[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  contacts        Contact[]
+  deals           Deal[]
+  activities      Activity[]
+  simCalls        SimCall[]
+
+  @@index([tenantId, phone])
+  @@index([tenantId, status])
+}
+
+model Contact {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leadId          String?
+  lead            Lead?          @relation(fields: [leadId], references: [id])
+  name            String
+  phone           String
+  email           String?
+  designation     String?
+  createdAt       DateTime       @default(now())
+
+  @@index([tenantId, phone])
+}
+
+model Deal {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leadId          String
+  lead            Lead           @relation(fields: [leadId], references: [id])
+  assignedToId    String?
+  assignedTo      User?          @relation("DealAssignee", fields: [assignedToId], references: [id])
+  title           String
+  amount          Float
+  stage           String         @default("NEW") // New, Proposal, Negotiation, Won, Lost
+  expectedClose   DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  invoices        Invoice[]
+
+  @@index([tenantId, stage])
+}
+
+model Activity {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leadId          String
+  lead            Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type            String         // CALL, NOTE, MEETING, EMAIL, SIM_CALL
+  description     String
+  performedBy     String
+  createdAt       DateTime       @default(now())
+
+  @@index([tenantId, leadId])
+}
+
+// ================= HRMS MODULE =================
+
+model Department {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  employees       Employee[]
+
+  @@unique([tenantId, name])
+}
+
+model Designation {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title           String
+  employees       Employee[]
+
+  @@unique([tenantId, title])
+}
+
+model Employee {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId          String?        @unique
+  user            User?          @relation(fields: [userId], references: [id])
+  employeeCode    String
+  firstName       String
+  lastName        String
+  departmentId    String
+  department      Department     @relation(fields: [departmentId], references: [id])
+  designationId   String
+  designation     Designation    @relation(fields: [designationId], references: [id])
+  joinDate        DateTime
+  basicSalary     Float          @default(0.0)
+  hra             Float          @default(0.0)
+  allowances      Float          @default(0.0)
+  createdAt       DateTime       @default(now())
+
+  attendances     Attendance[]
+  leaves          LeaveRequest[]
+  payrolls        Payroll[]
+
+  @@unique([tenantId, employeeCode])
+  @@index([tenantId])
+}
+
+model Attendance {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date            DateTime
+  checkIn         DateTime?
+  checkOut        DateTime?
+  status          String         @default("PRESENT") // PRESENT, LATE, HALF_DAY, ABSENT
+  workHours       Float          @default(0.0)
+
+  @@unique([tenantId, employeeId, date])
+  @@index([tenantId, date])
+}
+
+model LeaveRequest {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType       String         // CASUAL, MEDICAL, PAID
+  startDate       DateTime
+  endDate         DateTime
+  reason          String
+  status          String         @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedBy      String?
+  createdAt       DateTime       @default(now())
+
+  @@index([tenantId, status])
+}
+
+model Payroll {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month           String         // e.g. "2026-11"
+  grossSalary     Float
+  deductions      Float          @default(0.0) // PF, ESI, TDS
+  netSalary       Float
+  status          String         @default("DRAFT") // DRAFT, PROCESSED, PAID
+  generatedAt     DateTime       @default(now())
+
+  @@unique([tenantId, employeeId, month])
+}
+
+// ================= ERP & ACCOUNTING =================
+
+model Product {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku             String
+  name            String
+  description     String?
+  unitPrice       Float
+  stockQuantity   Int            @default(0)
+  reorderLevel    Int            @default(10)
+  gstRate         Float          @default(18.0)
+  createdAt       DateTime       @default(now())
+
+  @@unique([tenantId, sku])
+}
+
+model Invoice {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceNumber   String
+  dealId          String?
+  deal            Deal?          @relation(fields: [dealId], references: [id])
+  customerName    String
+  subTotal        Float
+  taxAmount       Float
+  totalAmount     Float
+  paidAmount      Float          @default(0.0)
+  paymentStatus   String         @default("UNPAID") // UNPAID, PARTIAL, PAID
+  dueDate         DateTime
+  createdAt       DateTime       @default(now())
+
+  ledgerEntries   LedgerEntry[]
+
+  @@unique([tenantId, invoiceNumber])
+}
+
+model LedgerEntry {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId       String?
+  invoice         Invoice?       @relation(fields: [invoiceId], references: [id])
+  account         String         // e.g. "ACCOUNTS_RECEIVABLE", "SALES_REVENUE", "BANK"
+  debit           Float          @default(0.0)
+  credit          Float          @default(0.0)
+  description     String
+  transactionDate DateTime       @default(now())
+
+  @@index([tenantId, account])
+}
+
+// ================= SIM TELECALLING & ANDROID COMPANION =================
+
+model PairedDevice {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User           @relation(fields: [userId], references: [id])
+  deviceName      String         // e.g. "Samsung Galaxy S24"
+  deviceToken     String         @unique
+  sim1Carrier     String?        // e.g. "Jio 5G"
+  sim1Number      String?
+  sim2Carrier     String?        // e.g. "Airtel 4G"
+  sim2Number      String?
+  batteryLevel    Int            @default(100)
+  isOnline        Boolean        @default(true)
+  lastSeen        DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+
+  simCalls        SimCall[]
+
+  @@index([tenantId])
+}
+
+model SimCall {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deviceId        String
+  device          PairedDevice   @relation(fields: [deviceId], references: [id])
+  leadId          String?
+  lead            Lead?          @relation(fields: [leadId], references: [id])
+  simSlot         Int            @default(1) // 1 or 2
+  direction       String         // INBOUND, OUTBOUND
+  phoneNumber     String
+  durationSeconds Int            @default(0)
+  disposition     String?        // INTERESTED, CALL_BACK, WRONG_NUMBER, BUSY, DEMO_BOOKED
+  notes           String?
+  callTimestamp   DateTime       @default(now())
+  syncedAt        DateTime       @default(now())
+
+  @@index([tenantId, phoneNumber])
+}
+
+// ================= AUTOMATION & AI WORKFORCE =================
+
+model Workflow {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  triggerEvent    String         // e.g. "SIM_CALL_ENDED", "LEAD_CREATED"
+  conditions      Json           // e.g. { "disposition": "INTERESTED" }
+  actions         Json           // e.g. [{ "type": "SEND_WHATSAPP", "template": "INTRO" }]
+  isActive        Boolean        @default(true)
+  executionCount  Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([tenantId, triggerEvent])
+}
+
+model AIAgentAuditLog {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentName       String         // NOVA, VOX, SALESPRO, PEOPLEMIND, INSIGHT
+  userId          String?
+  actionTaken     String
+  inputSummary    String
+  outputSummary   String
+  executionTimeMs Int
+  status          String         @default("SUCCESS") // SUCCESS, REJECTED_BY_RBAC, ERROR
+  createdAt       DateTime       @default(now())
+
+  @@index([tenantId, agentName])
+}
+
+// ================= SUPER ADMIN & BILLING =================
+
+model Subscription {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan            TenantPlan
+  billingCycle    String         @default("MONTHLY") // MONTHLY, ANNUAL
+  amountPaid      Float
+  startDate       DateTime       @default(now())
+  endDate         DateTime
+  status          String         @default("ACTIVE")
+
+  @@index([tenantId])
+}
+
+model UPIReconciliation {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  utrReference    String         @unique
+  amount          Float
+  payerName       String
+  paymentDate     DateTime       @default(now())
+  screenshotUrl   String?
+  status          String         @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verifiedBy      String?
+  verifiedAt      DateTime?
+
+  @@index([tenantId, status])
+}
