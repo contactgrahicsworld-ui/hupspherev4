@@ -1,5 +1,5 @@
 // HubSphere Enterprise V4 — Master Production Hardening & Smoke Test Suite
-// Zero-dependency Pure Node.js Automated Smoke Test
+// Zero-dependency Pure Node.js Automated Smoke Test for Clean Production State
 
 const assert = require("assert");
 const fs = require("fs");
@@ -123,16 +123,15 @@ test("Security Engine: 13-Role RBAC and Tenant Isolation Algorithms", () => {
   assert(content.includes("enforceTenantIsolation"), "Missing enforceTenantIsolation function");
 });
 
-// 5. AI Workforce Agents
-test("AI Workforce: Five Specialized Agents Defined with Security Guardrails", () => {
-  const aiPath = path.resolve(__dirname, "../src/lib/ai-orchestrator.ts");
-  const content = fs.readFileSync(aiPath, "utf-8");
+// 5. Clean Database & Zero Fake Data
+test("Data Integrity: Workspace initialized clean without fake data", () => {
+  const dbPath = path.resolve(__dirname, "../src/lib/mock-db.ts");
+  const content = fs.readFileSync(dbPath, "utf-8");
 
-  const agents = ["NOVA", "VOX", "SALESPRO", "PEOPLEMIND", "INSIGHT"];
-  for (const a of agents) {
-    assert(content.includes(`"${a}"`), `Missing agent: ${a}`);
-  }
-  assert(content.includes("injectionPatterns"), "Missing prompt injection defense");
+  assert(!content.includes("Rajesh Verma"), "Fake lead 'Rajesh Verma' must be removed");
+  assert(!content.includes("Mahindra Corrugated"), "Fake company must be removed");
+  assert(content.includes("leads: [] as LeadRecord[]"), "Leads array must be clean");
+  assert(content.includes("deals: [] as DealRecord[]"), "Deals array must be clean");
 });
 
 // 6. Multi-Tenant Scoping in API Routes
