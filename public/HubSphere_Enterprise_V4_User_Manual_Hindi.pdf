@@ -1,0 +1,129 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 1379 >>
+stream
+BT
+/F2 18 Tf 50 780 Td (HubSphere Enterprise V4 - Complete User Manual \(Hindi\)) Tj
+/F1 10 Tf 0 -22 Td (Enterprise Business Operating System | Multi-Tenant Cloud Architecture) Tj
+ET
+0.5 w 50 745 m 550 745 l S
+BT
+/F2 12 Tf 50 720 Td
+0 -25 Td /F2 13 Tf (1. Parichay evam System Overview) Tj
+/F1 10 Tf
+0 -16 Td (  - HubSphere Enterprise V4 ek complete multi-tenant business operating system hai.) Tj
+0 -16 Td (  - Isme CRM, HRMS, Payroll, GST Billing, Dual-SIM Telecalling aur 5 Autonomous AI Workforce shamil hain.) Tj
+0 -16 Td (  - Database: Supabase PostgreSQL cloud ke sath 100% data isolation aur real-time persistence.) Tj
+0 -10 Td () Tj
+0 -25 Td /F2 13 Tf (2. Super Admin evam Tenant Admin Setup \(Zero Predefined Credentials\)) Tj
+/F1 10 Tf
+0 -16 Td (  - Is system me koi bhi hardcoded ya predefined password/email nahi hota.) Tj
+0 -16 Td (  - Super Admin banne ke liye: Dashboard par 'Super Admin Setup' par click karein.) Tj
+0 -16 Td (  - Apna poora Naam, Official Email, aur apna banaya hua Strong Password darj karein.) Tj
+0 -16 Td (  - Submit karte hi aapka Super Admin account Supabase me PBKDF2 hash ke sath securely store ho jayega.) Tj
+0 -16 Td (  - Super Admin ko sabhi 396 permissions aur multi-tenant governance ke poore adhikar milte hain.) Tj
+0 -10 Td () Tj
+0 -40 Td /F1 9 Tf (HubSphere Enterprise V4 - Confidential & Proprietary - Powered by Supabase) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 1474 >>
+stream
+BT
+/F2 18 Tf 50 780 Td (HubSphere Enterprise V4 - User Manual \(Prishth 2\)) Tj
+/F1 10 Tf 0 -22 Td (Android SIM Telecalling & Autonomous AI Workforce) Tj
+ET
+0.5 w 50 745 m 550 745 l S
+BT
+/F2 12 Tf 50 720 Td
+0 -25 Td /F2 13 Tf (3. Physical Android SIM Telecalling System Setup) Tj
+/F1 10 Tf
+0 -16 Td (  - Bina kisi mehnge third-party API \(Twilio/Exotel\) ke apne physical SIM se calling karein.) Tj
+0 -16 Td (  - SIM 1 \(Jio\) ya SIM 2 \(Airtel\) handset ko QR code ya PIN se web dashboard se pair karein.) Tj
+0 -16 Td (  - TelecomManager aur SimCallReceiver background service incoming/outgoing calls ko real-time sync karti hai.) Tj
+0 -16 Td (  - Call disconnect hote hi disposition popup aata hai aur lead score automatically update ho jata hai.) Tj
+0 -10 Td () Tj
+0 -25 Td /F2 13 Tf (4. 5 Autonomous AI Workforce Agents) Tj
+/F1 10 Tf
+0 -16 Td (  - NOVA: Master Orchestrator - Business operations ko automate karta hai.) Tj
+0 -16 Td (  - VOX: Call & Voice Analyst - Telecalling transcripts aur call sentiment ko analyze karta hai.) Tj
+0 -16 Td (  - SALESPRO: Deals & Quotations - Real-time quotation draft karta hai aur deals close karta hai.) Tj
+0 -16 Td (  - PEOPLEMIND: HR & Attendance - Leave approvals aur salary structures manage karta hai.) Tj
+0 -16 Td (  - INSIGHT: Business Intelligence - Profitability aur revenue metrics monitor karta hai.) Tj
+0 -10 Td () Tj
+0 -40 Td /F1 9 Tf (HubSphere Enterprise V4 - Confidential & Proprietary - Powered by Supabase) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1370 >>
+stream
+BT
+/F2 18 Tf 50 780 Td (HubSphere Enterprise V4 - User Manual \(Prishth 3\)) Tj
+/F1 10 Tf 0 -22 Td (HRMS, Payroll, GST Billing & Supabase Security) Tj
+ET
+0.5 w 50 745 m 550 745 l S
+BT
+/F2 12 Tf 50 720 Td
+0 -25 Td /F2 13 Tf (5. HRMS evam Automated Payroll Management) Tj
+/F1 10 Tf
+0 -16 Td (  - Naye employee ko enroll karein aur unka basic salary set karein.) Tj
+0 -16 Td (  - Present, Late, Absent attendance mark hote hi payroll ready ho jata hai.) Tj
+0 -16 Td (  - 1-Click me official Salary Slip \(Payslip\) generate aur download karein.) Tj
+0 -16 Td (  - PF \(12%\), ESI \(0.75%\), Professional Tax aur TDS auto-deduct ho jate hain.) Tj
+0 -10 Td () Tj
+0 -25 Td /F2 13 Tf (6. GST Invoicing & Dynamic UPI QR Code) Tj
+/F1 10 Tf
+0 -16 Td (  - GST compliant Tax Invoice generate karein \(18% GST automatic calculate hota hai\).) Tj
+0 -16 Td (  - Real-time NPCI format UPI QR code generate hota hai jisse customer turant scan karke pay kar sakte hain.) Tj
+0 -10 Td () Tj
+0 -25 Td /F2 13 Tf (7. Supabase Database Suraksha evam Data Isolation) Tj
+/F1 10 Tf
+0 -16 Td (  - Aapka samast data Supabase PostgreSQL me tenant_id isolation ke sath surakshit rehta hai.) Tj
+0 -16 Td (  - Ek company ka data doosri company se bilkul alag aur protected rehta hai.) Tj
+0 -10 Td () Tj
+0 -40 Td /F1 9 Tf (HubSphere Enterprise V4 - Confidential & Proprietary - Powered by Supabase) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 9 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /MediaBox [0 0 595 842] /Contents 3 0 R >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 9 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /MediaBox [0 0 595 842] /Contents 4 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 9 0 R /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /MediaBox [0 0 595 842] /Contents 5 0 R >>
+endobj
+9 0 obj
+<< /Type /Pages /Kids [6 0 R 7 0 R 8 0 R] /Count 3 >>
+endobj
+10 0 obj
+<< /Type /Catalog /Pages 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000000164 00000 n 
+0000001594 00000 n 
+0000003119 00000 n 
+0000004540 00000 n 
+0000004676 00000 n 
+0000004812 00000 n 
+0000004948 00000 n 
+0000005017 00000 n 
+trailer
+<< /Size 11 /Root 10 0 R >>
+startxref
+5067
+%%EOF

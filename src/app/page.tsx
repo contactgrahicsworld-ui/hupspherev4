@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   LayoutDashboard,
   Users,
@@ -29,6 +30,7 @@ import {
   Inbox,
   UserPlus,
   PhoneForwarded,
+  Crown,
 } from "lucide-react";
 
 export default function EnterpriseDashboard() {
@@ -54,8 +56,30 @@ export default function EnterpriseDashboard() {
 
   // Modals state
   const [modalType, setModalType] = useState<
-    "none" | "lead" | "deal" | "employee" | "invoice" | "device" | "sim_call" | "tenant" | "payslip" | "recipe"
+    "none" | "lead" | "deal" | "employee" | "invoice" | "device" | "sim_call" | "tenant" | "payslip" | "recipe" | "admin_register"
   >("none");
+
+  // Admin Profile & Dynamic Auth state (Zero Predefined Credentials)
+  const [currentAdmin, setCurrentAdmin] = useState<{
+    name: string;
+    email: string;
+    role: string;
+    isSuperAdmin: boolean;
+  }>({
+    name: "Master Admin",
+    email: "owner@enterprise.internal",
+    role: "SUPER_ADMIN",
+    isSuperAdmin: true,
+  });
+
+  const [newAdminForm, setNewAdminForm] = useState({
+    role: "SUPER_ADMIN" as "SUPER_ADMIN" | "TENANT_ADMIN",
+    name: "",
+    email: "",
+    password: "",
+    organizationName: "",
+    tenantSlug: "",
+  });
 
   // Form states
   const [newLeadForm, setNewLeadForm] = useState({
@@ -359,6 +383,46 @@ export default function EnterpriseDashboard() {
     }
   };
 
+  // Register Brand New Admin (Zero Predefined Credentials)
+  const handleRegisterAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminForm.name || !newAdminForm.email || !newAdminForm.password) {
+      showToast("Validation Error", "Name, Email, and Password are required.");
+      return;
+    }
+    if (newAdminForm.password.length < 6) {
+      showToast("Weak Password", "Password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newAdminForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentAdmin({
+          name: data.user.name,
+          email: data.user.email,
+          role: data.user.role,
+          isSuperAdmin: data.user.isSuperAdmin,
+        });
+        if (data.tenant) {
+          setTenantsList(prev => [data.tenant, ...prev]);
+          setTenant(data.tenant.id);
+        }
+        setModalType("none");
+        showToast("Admin Created", `${data.user.role === "SUPER_ADMIN" ? "Super Admin" : "Tenant Admin"} account created with zero preset passwords. Saved to Supabase.`);
+      } else {
+        showToast("Registration Failed", data.error || "Could not register admin.");
+      }
+    } catch {
+      showToast("Error", "Network connection failed.");
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30">
       {/* Top Banner */}
@@ -407,6 +471,14 @@ export default function EnterpriseDashboard() {
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
           </div>
 
+          <Link
+            href="/user-manual"
+            className="flex items-center space-x-1.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">यूजर मैन्युअल (PDF)</span>
+          </Link>
+
           <button
             onClick={() => setActiveTab("ai")}
             className="flex items-center space-x-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
@@ -415,15 +487,21 @@ export default function EnterpriseDashboard() {
             <span className="hidden sm:inline">AI Workforce</span>
           </button>
 
-          <div className="flex items-center space-x-2 border-l border-slate-800 pl-2 sm:pl-3">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xs">
-              SA
+          <button
+            onClick={() => setModalType("admin_register")}
+            className="flex items-center space-x-2 border-l border-slate-800 pl-2 sm:pl-3 hover:bg-slate-800/80 p-1 rounded-lg transition cursor-pointer text-left"
+            title="Setup Brand New Super Admin (Zero Predefined Passwords)"
+          >
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-indigo-600 flex items-center justify-center font-bold text-xs text-slate-950 shadow">
+              <Crown className="w-4 h-4 text-white" />
             </div>
             <div className="hidden xl:block text-left">
-              <p className="font-semibold text-xs leading-none">Super Admin</p>
-              <span className="text-[10px] text-slate-400">396 Permissions</span>
+              <p className="font-semibold text-xs leading-none text-white">{currentAdmin.name}</p>
+              <span className="text-[10px] text-amber-400 font-medium">
+                {currentAdmin.role === "SUPER_ADMIN" ? "👑 Super Admin" : "🏢 Tenant Admin"} • 396 Perms
+              </span>
             </div>
-          </div>
+          </button>
         </div>
       </header>
 
@@ -494,6 +572,24 @@ export default function EnterpriseDashboard() {
                 );
               })}
             </nav>
+
+            <div className="pt-3 border-t border-slate-800 space-y-2">
+              <button
+                onClick={() => setModalType("admin_register")}
+                className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 text-amber-300 border border-amber-500/30 py-2 px-3 rounded-xl text-xs font-bold transition shadow-sm"
+              >
+                <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>+ नया सुपर एडमिन बनाएं</span>
+              </button>
+
+              <Link
+                href="/user-manual"
+                className="w-full flex items-center justify-center space-x-2 bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-300 border border-indigo-800/40 py-2 px-3 rounded-xl text-xs font-semibold transition"
+              >
+                <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>📖 यूजर मैन्युअल (Hindi PDF)</span>
+              </Link>
+            </div>
           </div>
 
           <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs">
@@ -502,12 +598,12 @@ export default function EnterpriseDashboard() {
               <span className="text-emerald-400 font-semibold">Supabase PG</span>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>Data Mode</span>
-              <span className="text-emerald-400 font-semibold">100% Real Live</span>
+              <span>Credentials</span>
+              <span className="text-amber-400 font-semibold">Zero Predefined</span>
             </div>
             <div className="flex justify-between text-slate-400">
               <span>Security</span>
-              <span className="text-emerald-400 font-semibold">Tenant Scoped</span>
+              <span className="text-emerald-400 font-semibold">PBKDF2 + RLS</span>
             </div>
           </div>
         </aside>
@@ -1856,6 +1952,150 @@ export default function EnterpriseDashboard() {
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-1.5 rounded-lg shadow"
                 >
                   Arm Recipe
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: BRAND NEW ADMIN SETUP (ZERO PREDEFINED CREDENTIALS) ================= */}
+      {modalType === "admin_register" && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">सुपर एडमिन / टेनेंट एडमिन सेटअप</h3>
+                  <p className="text-[11px] text-slate-400">Zero Predefined Credentials — Supabase PostgreSQL Persistence</p>
+                </div>
+              </div>
+              <button onClick={() => setModalType("none")} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-[11px] text-amber-200 leading-relaxed">
+              <strong>सुरक्षा गारंटी:</strong> इस सिस्टम में कोई भी पुराना या डिफॉल्ट पासवर्ड नहीं है। 
+              आप जो पासवर्ड यहां डालेंगे, वही एन्क्रिप्ट होकर सुपाबेस डेटाबेस में सुरक्षित सेव होगा।
+            </div>
+
+            <form onSubmit={handleRegisterAdmin} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-slate-300 block mb-1 font-medium">एडमिन रोल (Role) चुनें *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewAdminForm({ ...newAdminForm, role: "SUPER_ADMIN" })}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
+                      newAdminForm.role === "SUPER_ADMIN"
+                        ? "bg-amber-500/20 border-amber-500 text-amber-300"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="font-bold text-xs flex items-center space-x-1">
+                      <span>👑 Super Admin</span>
+                    </span>
+                    <span className="text-[10px] opacity-80 mt-1">पूरे प्लेटफॉर्म का मास्टर मालिक (396 परमिशन्स)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewAdminForm({ ...newAdminForm, role: "TENANT_ADMIN" })}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
+                      newAdminForm.role === "TENANT_ADMIN"
+                        ? "bg-indigo-500/20 border-indigo-500 text-indigo-300"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="font-bold text-xs flex items-center space-x-1">
+                      <span>🏢 Tenant Admin</span>
+                    </span>
+                    <span className="text-[10px] opacity-80 mt-1">विशिष्ट कंपनी का एडमिन (कंपनी आइसोलेशन)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">एडमिन का पूरा नाम *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="उदा. मनीष मुखर्जी"
+                    value={newAdminForm.name}
+                    onChange={e => setNewAdminForm({ ...newAdminForm, name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">आधिकारिक ईमेल आईडी *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin@enterprise.com"
+                    value={newAdminForm.email}
+                    onChange={e => setNewAdminForm({ ...newAdminForm, email: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 block mb-1 font-medium">नया मास्टर पासवर्ड (Your Secret Password) *</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="कम से कम 6 अक्षर का गुप्त पासवर्ड"
+                  value={newAdminForm.password}
+                  onChange={e => setNewAdminForm({ ...newAdminForm, password: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">कंपनी / संस्था का नाम</label>
+                  <input
+                    type="text"
+                    placeholder="उदा. Graphics World Enterprises"
+                    value={newAdminForm.organizationName}
+                    onChange={e => setNewAdminForm({ ...newAdminForm, organizationName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">कस्टम वर्कस्पेस स्लग (URL Slug)</label>
+                  <input
+                    type="text"
+                    placeholder="उदा. graphics-world"
+                    value={newAdminForm.tenantSlug}
+                    onChange={e => setNewAdminForm({ ...newAdminForm, tenantSlug: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setModalType("none")}
+                  className="px-3.5 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-white text-xs"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold px-5 py-2 rounded-lg shadow-lg text-xs flex items-center space-x-1.5 transition"
+                >
+                  <Crown className="w-4 h-4" />
+                  <span>एडमिन बनाएं एवं सुपाबेस में सेव करें</span>
                 </button>
               </div>
             </form>
