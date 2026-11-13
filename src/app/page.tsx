@@ -31,6 +31,7 @@ import {
   UserPlus,
   PhoneForwarded,
   Crown,
+  KeyRound,
 } from "lucide-react";
 
 export default function EnterpriseDashboard() {
@@ -56,8 +57,16 @@ export default function EnterpriseDashboard() {
 
   // Modals state
   const [modalType, setModalType] = useState<
-    "none" | "lead" | "deal" | "employee" | "invoice" | "device" | "sim_call" | "tenant" | "payslip" | "recipe" | "admin_register"
+    "none" | "lead" | "deal" | "employee" | "invoice" | "device" | "sim_call" | "tenant" | "payslip" | "recipe" | "admin_register" | "forgot_password"
   >("none");
+
+  // Forgot Password & 6-Digit OTP State (Supabase Free Tier)
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<1 | 2>(1);
+  const [forgotPasswordForm, setForgotPasswordForm] = useState({
+    email: "",
+    otp: "",
+    newPassword: "",
+  });
 
   // Admin Profile & Dynamic Auth state (Zero Predefined Credentials)
   const [currentAdmin, setCurrentAdmin] = useState<{
@@ -106,6 +115,7 @@ export default function EnterpriseDashboard() {
   const [newInvoiceForm, setNewInvoiceForm] = useState({
     customer: "",
     amount: "50000",
+    gstRate: "18",
     dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
   });
 
@@ -306,24 +316,121 @@ export default function EnterpriseDashboard() {
     showToast("Employee Enrolled", `${newEmp.name} registered with attendance punch.`);
   };
 
-  // Submit Real Invoice
-  const handleCreateInvoice = (e: React.FormEvent) => {
+  // Submit Real Invoice with Custom GST Rate
+  const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseFloat(newInvoiceForm.amount) || 0;
-    const taxNum = amountNum * 0.18;
+    const rateNum = parseFloat(newInvoiceForm.gstRate) || 0;
+    const taxNum = (amountNum * rateNum) / 100;
+    const totalNum = amountNum + taxNum;
     const newInv = {
       id: `INV-2026-${String(invoices.length + 1).padStart(3, "0")}`,
       customer: newInvoiceForm.customer || "Valued Enterprise Client",
       amount: amountNum,
+      gstRate: rateNum,
       tax: taxNum,
-      total: amountNum + taxNum,
+      total: totalNum,
       status: "PENDING",
       dueDate: newInvoiceForm.dueDate,
     };
     setInvoices(prev => [newInv, ...prev]);
     setModalType("none");
-    setNewInvoiceForm({ customer: "", amount: "50000", dueDate: new Date().toISOString().split("T")[0] });
-    showToast("Invoice Generated", `GST Tax Invoice ${newInv.id} issued for ₹${newInv.total.toLocaleString("en-IN")}.`);
+    setNewInvoiceForm({ customer: "", amount: "50000", gstRate: "18", dueDate: new Date().toISOString().split("T")[0] });
+    showToast("Invoice Generated", `Tax Invoice ${newInv.id} issued with ${rateNum}% GST (Total: ₹${totalNum.toLocaleString("en-IN")}).`);
+
+    try {
+      await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "INVOICE",
+          tenantId: tenant,
+          customer: newInv.customer,
+          amount: newInv.amount,
+          gstRate: newInv.gstRate,
+          dueDate: newInv.dueDate,
+        }),
+      });
+    } catch {
+      // offline safe
+    }
+  };
+
+  // Zero Data Loss — Full Snapshot Backup for Tenant & Super Admin
+  const handleDownloadBackup = async () => {
+    try {
+      showToast("Backup Started", "Creating zero-data-loss encrypted snapshot...");
+      const res = await fetch(`/api/backup/export?tenantId=${tenant}&role=${currentAdmin.role}`);
+      if (!res.ok) throw new Error("Backup failed");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `HubSphere_Master_Backup_${tenant}_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast("Backup Complete", "Full database snapshot downloaded securely. Zero data loss guaranteed.");
+    } catch {
+      showToast("Backup Error", "Could not export database snapshot.");
+    }
+  };
+
+  // Forgot Password — Request 6-Digit OTP via Supabase
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotPasswordForm.email) {
+      showToast("Validation Error", "Please enter your registered email address.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotPasswordForm.email }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setForgotPasswordStep(2);
+        showToast("OTP Sent", `6-digit verification code sent to ${forgotPasswordForm.email}.`);
+      } else {
+        showToast("Request Failed", data.error || "Could not generate OTP.");
+      }
+    } catch {
+      showToast("Error", "Network connection failed.");
+    }
+  };
+
+  // Forgot Password — Verify OTP & Reset Password in Supabase
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotPasswordForm.otp || !forgotPasswordForm.newPassword) {
+      showToast("Validation Error", "6-digit OTP and new password are required.");
+      return;
+    }
+    if (forgotPasswordForm.newPassword.length < 6) {
+      showToast("Weak Password", "Password must be at least 6 characters.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(forgotPasswordForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModalType("none");
+        setForgotPasswordStep(1);
+        setForgotPasswordForm({ email: "", otp: "", newPassword: "" });
+        showToast("Password Reset Successful", "Your password has been updated in Supabase. You can now login.");
+      } else {
+        showToast("Verification Failed", data.error || "Invalid OTP.");
+      }
+    } catch {
+      showToast("Error", "Network error during password reset.");
+    }
   };
 
   // Pair Real Device
@@ -471,6 +578,15 @@ export default function EnterpriseDashboard() {
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
           </div>
 
+          <button
+            onClick={handleDownloadBackup}
+            className="flex items-center space-x-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/50 text-emerald-300 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
+            title="Download Full Database Backup (Zero Data Loss JSON Snapshot)"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">डेटा बैकअप</span>
+          </button>
+
           <Link
             href="/user-manual"
             className="flex items-center space-x-1.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
@@ -580,6 +696,14 @@ export default function EnterpriseDashboard() {
               >
                 <Crown className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>+ नया सुपर एडमिन बनाएं</span>
+              </button>
+
+              <button
+                onClick={handleDownloadBackup}
+                className="w-full flex items-center justify-center space-x-2 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/40 py-2 px-3 rounded-xl text-xs font-semibold transition shadow-sm"
+              >
+                <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>📦 डेटा बैकअप लें (Zero Loss)</span>
               </button>
 
               <Link
@@ -1571,14 +1695,67 @@ export default function EnterpriseDashboard() {
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                 />
               </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-slate-400 block">GST Tax Rate (%) *</label>
+                  <span className="text-[10px] text-indigo-400">Custom / Dynamic</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    required
+                    value={newInvoiceForm.gstRate}
+                    onChange={e => setNewInvoiceForm({ ...newInvoiceForm, gstRate: e.target.value })}
+                    className="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center font-bold"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { label: "0% (Exempt)", val: "0" },
+                      { label: "5%", val: "5" },
+                      { label: "12%", val: "12" },
+                      { label: "18%", val: "18" },
+                      { label: "28%", val: "28" },
+                    ].map(preset => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setNewInvoiceForm({ ...newInvoiceForm, gstRate: preset.val })}
+                        className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                          newInvoiceForm.gstRate === preset.val
+                            ? "bg-indigo-600 text-white font-bold"
+                            : "bg-slate-800 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg space-y-1 font-mono text-[11px]">
                 <div className="flex justify-between text-slate-400">
-                  <span>GST (18%):</span>
-                  <span>₹ {(parseFloat(newInvoiceForm.amount || "0") * 0.18).toLocaleString("en-IN")}</span>
+                  <span>Base Taxable Amount:</span>
+                  <span>₹ {parseFloat(newInvoiceForm.amount || "0").toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>CGST ({(parseFloat(newInvoiceForm.gstRate || "0") / 2).toFixed(2)}%):</span>
+                  <span>₹ {((parseFloat(newInvoiceForm.amount || "0") * (parseFloat(newInvoiceForm.gstRate || "0") / 200))).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>SGST ({(parseFloat(newInvoiceForm.gstRate || "0") / 2).toFixed(2)}%):</span>
+                  <span>₹ {((parseFloat(newInvoiceForm.amount || "0") * (parseFloat(newInvoiceForm.gstRate || "0") / 200))).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-indigo-400 pt-1 border-t border-slate-800/80">
+                  <span>Total GST ({newInvoiceForm.gstRate}%):</span>
+                  <span>₹ {((parseFloat(newInvoiceForm.amount || "0") * (parseFloat(newInvoiceForm.gstRate || "0") / 100))).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between font-bold text-emerald-400 pt-1 border-t border-slate-800">
                   <span>Total Payable:</span>
-                  <span>₹ {(parseFloat(newInvoiceForm.amount || "0") * 1.18).toLocaleString("en-IN")}</span>
+                  <span>₹ {((parseFloat(newInvoiceForm.amount || "0") * (1 + (parseFloat(newInvoiceForm.gstRate || "0") / 100)))).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
               <div className="flex justify-end space-x-2 pt-2">
@@ -2082,23 +2259,143 @@ export default function EnterpriseDashboard() {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-between items-center pt-3 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setModalType("none")}
-                  className="px-3.5 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-white text-xs"
+                  onClick={() => {
+                    setModalType("forgot_password");
+                    setForgotPasswordStep(1);
+                  }}
+                  className="text-amber-400 hover:text-amber-300 text-xs flex items-center space-x-1 hover:underline"
                 >
-                  रद्द करें
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>पासवर्ड भूल गए? (6-Digit OTP)</span>
                 </button>
-                <button
-                  type="submit"
-                  className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold px-5 py-2 rounded-lg shadow-lg text-xs flex items-center space-x-1.5 transition"
-                >
-                  <Crown className="w-4 h-4" />
-                  <span>एडमिन बनाएं एवं सुपाबेस में सेव करें</span>
-                </button>
+
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalType("none")}
+                    className="px-3.5 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-white text-xs"
+                  >
+                    रद्द करें
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold px-5 py-2 rounded-lg shadow-lg text-xs flex items-center space-x-1.5 transition"
+                  >
+                    <Crown className="w-4 h-4" />
+                    <span>एडमिन बनाएं एवं सुपाबेस में सेव करें</span>
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: FORGOT PASSWORD (SUPABASE FREE TIER OTP) ================= */}
+      {modalType === "forgot_password" && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">पासवर्ड रीसेट (Forgot Password)</h3>
+                  <p className="text-[11px] text-slate-400">Supabase Free Tier — 6-Digit Email OTP Verification</p>
+                </div>
+              </div>
+              <button onClick={() => setModalType("none")} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {forgotPasswordStep === 1 ? (
+              <form onSubmit={handleRequestOtp} className="space-y-4 text-xs">
+                <div className="bg-indigo-950/40 border border-indigo-800/40 rounded-xl p-3 text-[11px] text-indigo-300">
+                  अपना पंजीकृत ईमेल दर्ज करें। सुपाबेस फ्री टियर के जरिए आपके ईमेल पर तुरंत 6-अंकों का वेरिफिकेशन ओटीपी (OTP) भेजा जाएगा।
+                </div>
+
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">पंजीकृत ईमेल आईडी *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="your-email@enterprise.com"
+                    value={forgotPasswordForm.email}
+                    onChange={e => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalType("none")}
+                    className="px-3.5 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-white"
+                  >
+                    रद्द करें
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold px-4 py-2 rounded-lg shadow transition"
+                  >
+                    ओटीपी (OTP) भेजें
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4 text-xs">
+                <div className="bg-emerald-950/40 border border-emerald-800/40 rounded-xl p-3 text-[11px] text-emerald-300">
+                  ईमेल <strong>{forgotPasswordForm.email}</strong> पर 6-अंकों का ओटीपी भेजा गया है। नीचे ओटीपी और अपना नया पासवर्ड दर्ज करें।
+                </div>
+
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">6-Digit OTP कोड *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    placeholder="6 अंकों का OTP दर्ज करें"
+                    value={forgotPasswordForm.otp}
+                    onChange={e => setForgotPasswordForm({ ...forgotPasswordForm, otp: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono tracking-widest text-center text-sm font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 block mb-1 font-medium">नया गुप्त पासवर्ड *</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="कम से कम 6 अक्षरों का नया पासवर्ड"
+                    value={forgotPasswordForm.newPassword}
+                    onChange={e => setForgotPasswordForm({ ...forgotPasswordForm, newPassword: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setForgotPasswordStep(1)}
+                    className="text-indigo-400 hover:underline text-[11px]"
+                  >
+                    ← ईमेल बदलें
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2 rounded-lg shadow transition"
+                  >
+                    पासवर्ड अपडेट करें
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
