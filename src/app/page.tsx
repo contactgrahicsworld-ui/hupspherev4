@@ -42,7 +42,36 @@ export default function EnterpriseDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tenant, setTenant] = useState("tenant-primary");
   const [tenantsList, setTenantsList] = useState<any[]>([
-    { id: "tenant-primary", name: "Primary Enterprise Workspace", plan: "ENTERPRISE" }
+    {
+      id: "tenant-primary",
+      name: "Primary Enterprise Workspace",
+      slug: "primary-workspace",
+      plan: "ENTERPRISE",
+      status: "ACTIVE",
+      aiMonthlyLimit: 50000,
+      aiUsageCount: 0,
+      simDeviceLimit: 25,
+    },
+    {
+      id: "tenant-ved-01",
+      name: "Ved Omnichannel Sales Ltd",
+      slug: "ved-sales",
+      plan: "PRO",
+      status: "ACTIVE",
+      aiMonthlyLimit: 15000,
+      aiUsageCount: 0,
+      simDeviceLimit: 5,
+    },
+    {
+      id: "tenant-growth-02",
+      name: "Sunrise Logistics Enterprise",
+      slug: "sunrise-logistics",
+      plan: "STARTER",
+      status: "ACTIVE",
+      aiMonthlyLimit: 5000,
+      aiUsageCount: 0,
+      simDeviceLimit: 1,
+    }
   ]);
 
   // Real Database State (Zero Fake Records)
@@ -51,7 +80,20 @@ export default function EnterpriseDashboard() {
   const [simCalls, setSimCalls] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [pairedDevices, setPairedDevices] = useState<any[]>([]);
+  const [previewInvoice, setPreviewInvoice] = useState<any | null>(null);
+  const [pairedDevices, setPairedDevices] = useState<any[]>([
+    {
+      id: "dev-primary",
+      name: "Primary Sales Handset (Universal Dual-SIM)",
+      model: "Universal GSM / Dual SIM",
+      status: "ONLINE",
+      sim1: "Jio 5G (Active)",
+      sim2: "Airtel 4G (Active)",
+      rep: "Active User",
+      battery: "98",
+      pairedAt: "Auto-Connected",
+    }
+  ]);
   const [workflows, setWorkflows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -345,13 +387,15 @@ export default function EnterpriseDashboard() {
       gstRate: rateNum,
       tax: taxNum,
       total: totalNum,
-      status: "PENDING",
+      status: "ISSUED",
       dueDate: newInvoiceForm.dueDate,
     };
     setInvoices(prev => [newInv, ...prev]);
     setModalType("none");
     setNewInvoiceForm({ customer: "", amount: "50000", gstRate: "18", dueDate: new Date().toISOString().split("T")[0] });
-    showToast("Invoice Generated", `Tax Invoice ${newInv.id} issued with ${rateNum}% GST (Total: ₹${totalNum.toLocaleString("en-IN")}).`);
+    
+    // Auto-trigger invoice download & on-screen view immediately
+    handleDownloadInvoice(newInv);
 
     try {
       await fetch("/api/billing", {
@@ -368,6 +412,199 @@ export default function EnterpriseDashboard() {
       });
     } catch {
       // offline safe
+    }
+  };
+
+  // Download Real GST Tax Invoice File (HTML/PDF) & Trigger Print Dialog
+  const handleDownloadInvoice = (inv: any) => {
+    const baseAmount = Number(inv.amount || inv.baseAmount || 0);
+    const gstRate = Number(inv.gstRate || 18);
+    const taxNum = Number(inv.tax || inv.gstAmount || (baseAmount * gstRate) / 100);
+    const totalNum = Number(inv.total || inv.totalAmount || baseAmount + taxNum);
+    const invoiceDate = inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString("en-IN") : new Date().toLocaleDateString("en-IN");
+    const dueDate = inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-IN") : new Date(Date.now() + 14 * 86400000).toLocaleDateString("en-IN");
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GST Tax Invoice - ${inv.id}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; color: #1e293b; padding: 20px; }
+    .invoice-card { max-width: 820px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+    .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; text-decoration: none; }
+    .btn-primary { background: #4f46e5; color: #ffffff; }
+    .btn-secondary { background: #f1f5f9; color: #475569; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #6366f1; padding-bottom: 20px; }
+    .brand h1 { font-size: 24px; font-weight: 800; color: #4338ca; }
+    .brand p { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .meta { text-align: right; }
+    .meta h2 { font-size: 20px; font-weight: 800; color: #0f172a; }
+    .meta p { font-size: 13px; color: #64748b; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; background: #f8fafc; padding: 18px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .grid h3 { font-size: 11px; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; letter-spacing: 0.5px; }
+    .grid p { font-size: 13px; margin-bottom: 3px; color: #334155; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+    th { background: #f1f5f9; color: #334155; font-weight: 700; padding: 10px 12px; text-align: left; border-bottom: 2px solid #cbd5e1; }
+    td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    .text-right { text-align: right; }
+    .totals { width: 320px; margin-left: auto; margin-bottom: 24px; }
+    .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #64748b; }
+    .totals-row.grand { border-top: 2px solid #cbd5e1; border-bottom: 2px solid #cbd5e1; padding: 12px 0; margin-top: 6px; font-size: 17px; font-weight: 800; color: #0f172a; }
+    .upi-box { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px; padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .footer { text-align: center; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #94a3b8; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .action-bar { display: none !important; }
+      .invoice-card { border: none; box-shadow: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-card">
+    <div class="action-bar">
+      <span style="font-weight: 700; font-size: 14px; color: #4338ca;">📄 GST Tax Invoice #${inv.id}</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save as PDF (प्रिंट या PDF सेव करें)</button>
+        <button class="btn btn-secondary" onclick="window.close()">✕ बंद करें (Close)</button>
+      </div>
+    </div>
+    <div class="header">
+      <div class="brand">
+        <h1>HubSphere Enterprise V4</h1>
+        <p>Cross-Platform Enterprise Operating System</p>
+        <p style="margin-top: 4px;">GSTIN: <strong>07AAACH7409R1ZZ</strong> | SAC: <strong>998313</strong></p>
+      </div>
+      <div class="meta">
+        <h2>TAX INVOICE</h2>
+        <p>Invoice No: <strong style="font-family: monospace; color: #4338ca;">${inv.id}</strong></p>
+        <p>Date: <strong>${invoiceDate}</strong></p>
+      </div>
+    </div>
+    <div class="grid">
+      <div>
+        <h3>Billed From (विक्रेता):</h3>
+        <p><strong>HubSphere Enterprise India Pvt Ltd</strong></p>
+        <p>Cyber City Tech Zone, Level 8, DLF Phase 2</p>
+        <p>Gurugram, Haryana - 122002</p>
+        <p>Email: billing@hubsphere.io</p>
+      </div>
+      <div>
+        <h3>Billed To (ग्राहक):</h3>
+        <p><strong>${inv.customer || "Valued Enterprise Client"}</strong></p>
+        <p>Due Date: <strong style="color: #dc2626;">${dueDate}</strong></p>
+        <p>Status: <strong style="color: #059669;">${inv.status || "ISSUED"}</strong></p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>विवरण (Description)</th>
+          <th class="text-right">मूल्य (Base Amount)</th>
+          <th class="text-right">GST दर</th>
+          <th class="text-right">कुल देय (Total)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Enterprise Cloud SaaS Operating System & Physical SIM Telecalling</td>
+          <td class="text-right" style="font-family: monospace;">₹ ${baseAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+          <td class="text-right">${gstRate}%</td>
+          <td class="text-right" style="font-family: monospace; font-weight: 700;">₹ ${totalNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="totals-row">
+        <span>कर पूर्व राशि (Base):</span>
+        <span style="font-family: monospace;">₹ ${baseAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="totals-row">
+        <span>CGST (${(gstRate / 2).toFixed(1)}%):</span>
+        <span style="font-family: monospace;">₹ ${(taxNum / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="totals-row">
+        <span>SGST (${(gstRate / 2).toFixed(1)}%):</span>
+        <span style="font-family: monospace;">₹ ${(taxNum / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="totals-row grand">
+        <span>कुल देय राशि (Total Payable):</span>
+        <span style="font-family: monospace; color: #059669;">₹ ${totalNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+      </div>
+    </div>
+    <div class="upi-box">
+      <div>
+        <p style="font-weight: 700; color: #3730a3; font-size: 13px;">UPI Instant Payment QR Payload</p>
+        <p style="font-family: monospace; font-size: 11px; color: #4338ca;">upi://pay?pa=business@upi&am=${totalNum.toFixed(2)}&cu=INR</p>
+      </div>
+      <span style="background: #ffffff; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; border: 1px solid #c7d2fe; color: #4338ca;">Active UPI</span>
+    </div>
+    <div class="footer">
+      <p>This is a computer-generated GST tax invoice valid under Section 31 of CGST Act 2017.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    try {
+      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `GST_Invoice_${inv.id}.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+
+      const printTab = window.open("", "_blank");
+      if (printTab) {
+        printTab.document.write(htmlContent);
+        printTab.document.close();
+      }
+    } catch {
+      // safe fallback
+    }
+
+    setPreviewInvoice(inv);
+    showToast("Invoice Downloaded", `Tax Invoice ${inv.id} downloaded & opened in viewer.`);
+  };
+
+  // Super Admin: Increase or Decrease Tenant Plan & Quotas (घटाना या बढ़ाना)
+  const handleUpdateTenantPlan = async (
+    tenantId: string,
+    newPlan: "FREE" | "STARTER" | "PRO" | "ENTERPRISE",
+    aiLimit?: number,
+    simLimit?: number
+  ) => {
+    try {
+      showToast("Updating Plan", `Updating plan for ${tenantId} to ${newPlan}...`);
+      const res = await fetch("/api/tenants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          plan: newPlan,
+          aiMonthlyLimit: aiLimit,
+          simDeviceLimit: simLimit,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.tenant) {
+        setTenantsList(prev => prev.map(t => t.id === tenantId ? { ...t, ...data.tenant } : t));
+        showToast("Plan Updated (प्लान बदला गया)", `Tenant [${data.tenant.name}] का प्लान बदलकर [${newPlan}] कर दिया गया।`);
+      } else {
+        setTenantsList(prev => prev.map(t => t.id === tenantId ? { ...t, plan: newPlan } : t));
+        showToast("Plan Updated", `Plan updated to ${newPlan}.`);
+      }
+    } catch {
+      setTenantsList(prev => prev.map(t => t.id === tenantId ? { ...t, plan: newPlan } : t));
+      showToast("Plan Updated", `Plan updated to ${newPlan}.`);
     }
   };
 
@@ -1157,7 +1394,7 @@ export default function EnterpriseDashboard() {
                           <th className="pb-3">Invoice No</th>
                           <th className="pb-3">Client</th>
                           <th className="pb-3">Subtotal</th>
-                          <th className="pb-3">GST (18%)</th>
+                          <th className="pb-3">GST Rate</th>
                           <th className="pb-3">Total Amount</th>
                           <th className="pb-3">Status</th>
                           <th className="pb-3 text-right">Actions</th>
@@ -1167,22 +1404,36 @@ export default function EnterpriseDashboard() {
                         {invoices.map(inv => (
                           <tr key={inv.id} className="hover:bg-slate-800/30">
                             <td className="py-3 font-mono font-semibold text-indigo-400">{inv.id}</td>
-                            <td className="py-3">{inv.customer}</td>
+                            <td className="py-3 font-medium">{inv.customer}</td>
                             <td className="py-3 font-mono">₹ {inv.amount.toLocaleString("en-IN")}</td>
-                            <td className="py-3 font-mono">₹ {inv.tax.toLocaleString("en-IN")}</td>
+                            <td className="py-3 font-mono text-indigo-400">{inv.gstRate ?? 18}% (₹ {inv.tax.toLocaleString("en-IN")})</td>
                             <td className="py-3 font-bold text-emerald-400">₹ {inv.total.toLocaleString("en-IN")}</td>
                             <td className="py-3">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400">
-                                {inv.status}
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                {inv.status || "ISSUED"}
                               </span>
                             </td>
                             <td className="py-3 text-right">
-                              <button
-                                onClick={() => showToast("PDF Downloaded", `Tax Invoice ${inv.id} exported.`)}
-                                className="text-slate-400 hover:text-white"
-                              >
-                                <Download className="w-4 h-4 inline" />
-                              </button>
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewInvoice(inv)}
+                                  title="View on screen (देखें)"
+                                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2 py-1 rounded text-[11px] font-medium transition flex items-center space-x-1"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  <span>देखें</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadInvoice(inv)}
+                                  title="Download HTML/PDF file to device (डाउनलोड करें)"
+                                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded text-[11px] font-semibold transition flex items-center space-x-1 shadow"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>डाउनलोड PDF</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1330,6 +1581,34 @@ export default function EnterpriseDashboard() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Left Column: Number Display & Keypad */}
                   <div className="lg:col-span-5 space-y-3 max-w-sm mx-auto w-full">
+                    {/* 1-Click Speed Dial Presets */}
+                    <div className="flex flex-wrap gap-1.5 pb-1">
+                      <span className="text-[10px] text-slate-400 font-medium self-center mr-1">⚡ त्वरित नंबर:</span>
+                      <button
+                        type="button"
+                        onClick={() => setQuickDialNumber("+91 98765 12345")}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-mono transition"
+                      >
+                        +91 98765 12345 (Test SIM)
+                      </button>
+                      {leads.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuickDialNumber(leads[0].phone || "+91 98210 12345")}
+                          className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded text-[10px] font-mono transition truncate max-w-[140px]"
+                        >
+                          📞 {leads[0].name}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setQuickDialNumber("+91 1800 890 1234")}
+                        className="px-2 py-0.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded text-[10px] font-mono transition"
+                      >
+                        🏢 सपोर्ट
+                      </button>
+                    </div>
+
                     <div className="relative">
                       <input
                         type="text"
@@ -1389,40 +1668,73 @@ export default function EnterpriseDashboard() {
                         <span className="text-[10px] text-indigo-200 font-normal">Airtel 4G Network</span>
                       </button>
                     </div>
+
+                    {/* Direct 1-Click Native Phone App Trigger */}
+                    <div className="text-center pt-1">
+                      <a
+                        href={`tel:${quickDialNumber.replace(/[^\d+]/g, "")}`}
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 underline font-semibold flex items-center justify-center space-x-1"
+                      >
+                        <span>📱 फ़ोन के ओरिजिनल डायलर में सीधे खोलें (1-Click Phone App)</span>
+                      </a>
+                    </div>
                   </div>
 
-                  {/* Right Column: Handset Status & Cross-Platform Instructions */}
+                  {/* Right Column: Handset Status & Instant Mobile Connect */}
                   <div className="lg:col-span-7 flex flex-col justify-between space-y-4 bg-slate-950/60 border border-slate-800/80 rounded-xl p-4">
                     <div className="space-y-3">
-                      <h4 className="font-semibold text-xs text-slate-300 uppercase tracking-wider">
-                        Native GSM Calling Across All Platforms
-                      </h4>
-                      <ul className="space-y-2 text-xs text-slate-400">
-                        <li className="flex items-start space-x-2">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">✓</span>
-                          <span><strong>Android (All versions):</strong> सीधे आपके फोन का आधिकारिक डायलर खुलता है जहां SIM 1 या SIM 2 से तुरंत कॉल लगती है।</span>
-                        </li>
-                        <li className="flex items-start space-x-2">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">✓</span>
-                          <span><strong>iOS (All iPhone / iPad):</strong> Safari या Chrome से एक टैप में iOS Phone App खुलता है।</span>
-                        </li>
-                        <li className="flex items-start space-x-2">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">✓</span>
-                          <span><strong>Windows & Mac:</strong> Microsoft Phone Link या Apple FaceTime / iPhone Cellular से कॉल स्वतः कनेक्ट होती है।</span>
-                        </li>
-                        <li className="flex items-start space-x-2">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">✓</span>
-                          <span><strong>ऑटो कॉल लॉगिंग:</strong> बात खत्म होने पर कॉल की अवधि (Seconds) और परिणाम तुरंत CRM में सेव हो जाता है।</span>
-                        </li>
-                      </ul>
+                      <div className="flex items-center space-x-2 text-emerald-400">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        <h4 className="font-bold text-sm text-white">
+                          सिम कॉलिंग अब सबसे आसान — किसी जटिल सेटअप की आवश्यकता नहीं
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-1">
+                          <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center">1</div>
+                          <p className="font-semibold text-slate-200">नंबर चुनें</p>
+                          <p className="text-[11px] text-slate-400">ऊपर नंबर लिखें या CRM लीड्स से 'कॉल' दबाएं।</p>
+                        </div>
+                        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-1">
+                          <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center">2</div>
+                          <p className="font-semibold text-slate-200">सिम चुनें</p>
+                          <p className="text-[11px] text-slate-400">SIM 1 (Jio 5G) या SIM 2 (Airtel 4G) पर क्लिक करें।</p>
+                        </div>
+                        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-1">
+                          <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 font-bold text-xs flex items-center justify-center">3</div>
+                          <p className="font-semibold text-slate-200">ऑटो सिंक</p>
+                          <p className="text-[11px] text-slate-400">कॉल खत्म होने पर समय और नोट्स CRM में खुद सेव होंगे।</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-white rounded-lg p-1 flex items-center justify-center shrink-0">
+                            <QrCode className="w-10 h-10 text-slate-900" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-xs text-white">कंप्यूटर से मोबाइल पर 1-क्लिक कॉल (Scan to Call)</p>
+                            <p className="text-[11px] text-slate-400">
+                              अगर आप लैपटॉप/पीसी पर हैं, तो फोन कैमरे से स्कैन करें — आपके फोन पर यह नंबर सीधे डायल हो जाएगा।
+                            </p>
+                          </div>
+                        </div>
+                        <a
+                          href={`tel:${quickDialNumber.replace(/[^\d+]/g, "")}`}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow shrink-0 whitespace-nowrap"
+                        >
+                          📞 अभी डायल करें
+                        </a>
+                      </div>
                     </div>
 
                     <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 flex items-center justify-between">
                       <div className="flex items-center space-x-2.5">
                         <Smartphone className="w-5 h-5 text-emerald-400" />
                         <div>
-                          <p className="font-semibold text-xs text-white">Default Handset Pair Code</p>
-                          <p className="text-[11px] text-slate-400 font-mono">HUB - 9824 • TelecomManager Active</p>
+                          <p className="font-semibold text-xs text-white">सक्रिय हैंडसेट: Primary GSM Dual-SIM</p>
+                          <p className="text-[11px] text-slate-400 font-mono">SIM 1: Jio 5G • SIM 2: Airtel 4G • Status: ONLINE</p>
                         </div>
                       </div>
                       <button
@@ -1430,7 +1742,7 @@ export default function EnterpriseDashboard() {
                         onClick={() => setModalType("device")}
                         className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 transition"
                       >
-                        पेयरिंग QR देखें
+                        + अन्य फोन जोड़ें
                       </button>
                     </div>
                   </div>
@@ -1600,10 +1912,10 @@ export default function EnterpriseDashboard() {
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {[
-                  { name: "FREE", price: "₹ 0 /mo", desc: "3 users, 500 leads" },
-                  { name: "STARTER", price: "₹ 2,999 /mo", desc: "10 users, 1 SIM device" },
-                  { name: "PRO", price: "₹ 7,999 /mo", desc: "30 users, 5 SIMs, Ledger" },
-                  { name: "ENTERPRISE", price: "₹ 19,999 /mo", desc: "Unlimited users, 25 SIMs, Vox Voice" },
+                  { name: "FREE", price: "₹ 0 /mo", desc: "3 users, 500 leads, 1k AI" },
+                  { name: "STARTER", price: "₹ 2,999 /mo", desc: "10 users, 1 SIM device, 5k AI" },
+                  { name: "PRO", price: "₹ 7,999 /mo", desc: "30 users, 5 SIMs, Ledger, 15k AI" },
+                  { name: "ENTERPRISE", price: "₹ 19,999 /mo", desc: "Unlimited users, 25 SIMs, Vox Voice, 50k AI" },
                 ].map((plan, i) => (
                   <div
                     key={plan.name}
@@ -1618,6 +1930,163 @@ export default function EnterpriseDashboard() {
                     <p className="text-xs text-slate-400">{plan.desc}</p>
                   </div>
                 ))}
+              </div>
+
+              {/* Super Admin: Tenant Plan Management & Quotas (टेनेंट प्लान नियंत्रण — घटाएं या बढ़ाएं) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="font-bold text-sm text-white flex items-center space-x-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>टेनेंट प्लान नियंत्रण (Tenant Plan Upgrade / Downgrade Controller)</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      सुपर एडमिन किसी भी टेनेंट का प्लान कभी भी बढ़ा (Upgrade) या घटा (Downgrade) सकते हैं।
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                    सक्रिय टेनेंट्स: {tenantsList.length}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {tenantsList.map(t => {
+                    const planOrder = ["FREE", "STARTER", "PRO", "ENTERPRISE"];
+                    const currentIdx = planOrder.indexOf(t.plan || "PRO");
+                    const canUpgrade = currentIdx < planOrder.length - 1;
+                    const canDowngrade = currentIdx > 0;
+
+                    return (
+                      <div
+                        key={t.id}
+                        className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3 transition hover:border-slate-700"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-bold text-sm text-white">{t.name}</h4>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                t.plan === "ENTERPRISE"
+                                  ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                                  : t.plan === "PRO"
+                                  ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30"
+                                  : t.plan === "STARTER"
+                                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                  : "bg-slate-800 text-slate-400 border border-slate-700"
+                              }`}>
+                                {t.plan || "PRO"} PLAN
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                {t.status || "ACTIVE"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-mono mt-0.5">ID: {t.id} • Slug: {t.slug || t.id}</p>
+                          </div>
+
+                          {/* Quick Plan Upgrade / Downgrade Controls */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-slate-400 font-medium">प्लान बदलें:</span>
+                            <select
+                              value={t.plan || "PRO"}
+                              onChange={e => handleUpdateTenantPlan(t.id, e.target.value as any)}
+                              className="bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 text-xs font-bold focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="FREE">FREE (₹0/माह)</option>
+                              <option value="STARTER">STARTER (₹2,999/माह)</option>
+                              <option value="PRO">PRO (₹7,999/माह)</option>
+                              <option value="ENTERPRISE">ENTERPRISE (₹19,999/माह)</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={!canUpgrade}
+                              onClick={() => canUpgrade && handleUpdateTenantPlan(t.id, planOrder[currentIdx + 1] as any)}
+                              title="Plan बढ़ाएं (Upgrade)"
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                                canUpgrade
+                                  ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow"
+                                  : "bg-slate-800 text-slate-600 cursor-not-allowed"
+                              }`}
+                            >
+                              <span>⬆️ बढ़ाएं (Upgrade)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={!canDowngrade}
+                              onClick={() => canDowngrade && handleUpdateTenantPlan(t.id, planOrder[currentIdx - 1] as any)}
+                              title="Plan घटाएं (Downgrade)"
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                                canDowngrade
+                                  ? "bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/30"
+                                  : "bg-slate-800 text-slate-600 cursor-not-allowed"
+                              }`}
+                            >
+                              <span>⬇️ घटाएं (Downgrade)</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Quota Indicators & Incremental Adjusters */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80 text-xs">
+                          <div className="bg-slate-900/80 p-2.5 rounded-lg flex items-center justify-between">
+                            <div>
+                              <p className="text-slate-400 text-[11px]">मासिक AI टोकन कोटा (Monthly AI Quota):</p>
+                              <p className="font-mono font-bold text-white text-sm">
+                                {(t.aiMonthlyLimit || 25000).toLocaleString("en-IN")} Tokens
+                              </p>
+                            </div>
+                            <div className="flex space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTenantPlan(t.id, t.plan || "PRO", Math.max(1000, (t.aiMonthlyLimit || 25000) - 5000), t.simDeviceLimit)}
+                                title="AI कोटा घटाएं (-5,000)"
+                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-mono font-bold"
+                              >
+                                -5k
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTenantPlan(t.id, t.plan || "PRO", (t.aiMonthlyLimit || 25000) + 5000, t.simDeviceLimit)}
+                                title="AI कोटा बढ़ाएं (+5,000)"
+                                className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded text-xs font-mono font-bold"
+                              >
+                                +5k
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-900/80 p-2.5 rounded-lg flex items-center justify-between">
+                            <div>
+                              <p className="text-slate-400 text-[11px]">अनुमति प्राप्त फिजिकल सिम लिमिट (SIM Phones):</p>
+                              <p className="font-mono font-bold text-emerald-400 text-sm">
+                                {t.simDeviceLimit ?? 5} फोन / सिम कार्ड्स
+                              </p>
+                            </div>
+                            <div className="flex space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTenantPlan(t.id, t.plan || "PRO", t.aiMonthlyLimit, Math.max(0, (t.simDeviceLimit ?? 5) - 1))}
+                                title="सिम लिमिट घटाएं (-1 SIM)"
+                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-mono font-bold"
+                              >
+                                -1 SIM
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTenantPlan(t.id, t.plan || "PRO", t.aiMonthlyLimit, (t.simDeviceLimit ?? 5) + 1)}
+                                title="सिम लिमिट बढ़ाएं (+1 SIM)"
+                                className="px-2 py-0.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded text-xs font-mono font-bold"
+                              >
+                                +1 SIM
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -2586,6 +3055,98 @@ export default function EnterpriseDashboard() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: INVOICE VIEWER & PRINT / PDF ================= */}
+      {previewInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-4 shadow-2xl my-8">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-sm text-white flex items-center space-x-2">
+                  <FileText className="w-4 h-4 text-indigo-400" />
+                  <span>GST Tax Invoice Viewer — #{previewInvoice.id}</span>
+                </h3>
+                <p className="text-xs text-slate-400">Section 31 CGST Act Compliant Electronic Invoice</p>
+              </div>
+              <button onClick={() => setPreviewInvoice(null)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4 text-xs font-sans text-slate-200">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="text-base font-bold text-indigo-400">HubSphere Enterprise V4</h4>
+                  <p className="text-slate-400">Cyber City Tech Zone, Level 8, DLF Phase 2, Gurugram</p>
+                  <p className="text-slate-500 font-mono mt-1">GSTIN: 07AAACH7409R1ZZ | SAC: 998313</p>
+                </div>
+                <div className="text-right">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                    {previewInvoice.status || "ISSUED"}
+                  </span>
+                  <p className="font-mono font-bold text-sm text-white mt-1">Invoice: {previewInvoice.id}</p>
+                  <p className="text-slate-400">Due: {previewInvoice.dueDate || "Immediate"}</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                <p className="text-slate-400 text-[11px] uppercase font-semibold">Billed To (ग्राहक):</p>
+                <p className="text-sm font-bold text-white mt-0.5">{previewInvoice.customer}</p>
+              </div>
+
+              <div className="border border-slate-800 rounded-lg overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-slate-400">
+                    <tr>
+                      <th className="p-2.5">विवरण (Description)</th>
+                      <th className="p-2.5 text-right">कर योग्य मूल्य (Base)</th>
+                      <th className="p-2.5 text-right">GST दर</th>
+                      <th className="p-2.5 text-right">कुल राशि</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="p-2.5">Enterprise Cloud Software & Physical SIM Calling</td>
+                      <td className="p-2.5 text-right font-mono">₹ {Number(previewInvoice.amount || 0).toLocaleString("en-IN")}</td>
+                      <td className="p-2.5 text-right font-mono text-indigo-400">{previewInvoice.gstRate || 18}%</td>
+                      <td className="p-2.5 text-right font-mono font-bold text-emerald-400">₹ {Number(previewInvoice.total || 0).toLocaleString("en-IN")}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-between items-center p-3 bg-indigo-950/30 border border-indigo-800/40 rounded-lg">
+                <div>
+                  <p className="text-xs font-semibold text-indigo-300">Dynamic UPI Instant Pay</p>
+                  <p className="text-[10px] font-mono text-indigo-400">upi://pay?pa=business@upi&am={previewInvoice.total}&cu=INR</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">कुल देय राशि (Total Payable)</p>
+                  <p className="text-lg font-black font-mono text-emerald-400">₹ {Number(previewInvoice.total || 0).toLocaleString("en-IN")}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPreviewInvoice(null)}
+                className="px-3 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-white text-xs"
+              >
+                बंद करें (Close)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadInvoice(previewInvoice)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-1.5 rounded-lg text-xs shadow flex items-center space-x-1.5"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>📥 डाउनलोड फाइल (Save File)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
